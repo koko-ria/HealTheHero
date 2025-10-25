@@ -49,14 +49,17 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\Scripts\Hero\HeroAI.cs" />
+    <Compile Include="Assets\Scripts\Player\WeaponUI.cs" />
     <Compile Include="Assets\Scripts\Player\PlayerVisual.cs" />
     <Compile Include="Assets\Scripts\Player\GameInput.cs" />
     <Compile Include="Assets\Scripts\Utilities\Utility.cs" />
+    <Compile Include="Assets\Scripts\Player\Crosshair.cs" />
     <Compile Include="Assets\Scripts\Enemy\EnemyBehaviour.cs" />
     <Compile Include="Assets\Scripts\Player\InputS\PlayersInput.cs" />
     <Compile Include="Assets\Scripts\Enemy\AttackPattern.cs" />
     <Compile Include="Assets\Scripts\Player\Player.cs" />
     <Compile Include="Assets\Scripts\Enemy\Projectile.cs" />
+    <Compile Include="Assets\Scripts\Player\AmmoType.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">

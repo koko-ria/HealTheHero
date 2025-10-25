@@ -458,10 +458,13 @@
 "Assets/Scripts/Enemy/EnemyBehaviour.cs"
 "Assets/Scripts/Enemy/Projectile.cs"
 "Assets/Scripts/Hero/HeroAI.cs"
+"Assets/Scripts/Player/AmmoType.cs"
+"Assets/Scripts/Player/Crosshair.cs"
 "Assets/Scripts/Player/GameInput.cs"
 "Assets/Scripts/Player/InputS/PlayersInput.cs"
 "Assets/Scripts/Player/Player.cs"
 "Assets/Scripts/Player/PlayerVisual.cs"
+"Assets/Scripts/Player/WeaponUI.cs"
 "Assets/Scripts/Utilities/Utility.cs"
 -langversion:9.0
 /deterministic

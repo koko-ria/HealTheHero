@@ -28,5 +28,13 @@ public class GameInput : MonoBehaviour
     {
         return Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
     }
+
+    public Vector3 GetMousePosition()
+{
+    Vector3 mousePos = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
+    mousePos.z = 0;
+    return mousePos;
+}
+
 }
 

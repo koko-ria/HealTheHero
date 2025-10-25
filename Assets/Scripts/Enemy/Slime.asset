@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6ea5f9bd22f48a349b4539046ddd84cb, type: 3}
   m_Name: Slime
   m_EditorClassIdentifier: Assembly-CSharp::AttackPattern
-  patternType: 2
-  cooldown: 2
+  patternType: 1
+  cooldown: 1.5
   projectilePrefab: {fileID: 7169446259268759799, guid: fbe54af888b6ccc43ba8974ffea417f4, type: 3}
   projectileSpeed: 15
   damage: 1
-  projectileCount: 15
+  projectileCount: 5
   spreadAngle: 180
   burstDelay: 0.1
