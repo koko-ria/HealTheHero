@@ -39,6 +39,7 @@ public class HeroAI : MonoBehaviour
     private float lastRushTime = -Mathf.Infinity; // To track cooldowns
     private float lastWhirlTime = -Mathf.Infinity; // To track cooldowns
     private Attacks currentAttackType; // To cycle between attacks
+    public float health;
 
     public static HeroAI Instance { get; private set; } // Singleton pattern
 
@@ -327,14 +328,27 @@ public class HeroAI : MonoBehaviour
             enemy = other.transform;
             Debug.Log("Enemy detected! Transitioning to Attacking state.");
             startingState = State.Attacking;
-            
+
             // Immediately allow an attack when enemy is detected
-            lastRushTime = -rushCooldown; 
+            lastRushTime = -rushCooldown;
             lastWhirlTime = -whirlCooldown;
             // Optionally: set initialAttackType here if you want it to be predictable upon detection
         }
     }
+    
+    public void TakeDamage(int damage)
+    {
+        health -= damage;
+        if (health <= 0)
+        {
+            Die();
+        }
+    }
 
+    void Die()
+    {
+        Destroy(this);
+    }
     private void OnTriggerExit2D(Collider2D other)
     {
         if (other.CompareTag("Enemy") && other.transform == enemy)
