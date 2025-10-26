@@ -6,17 +6,18 @@ TagManager:
   tags:
   - Enemy
   - Wall
+  - Hero
   layers:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - 
+  - Hero
   - Water
   - UI
-  - 
-  - 
-  - 
-  - 
+  - Player
+  - Enemy
+  - Wall
+  - Detection
   - 
   - 
   - 

@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 8238022904898595791}
   - component: {fileID: 1595341590423960534}
   - component: {fileID: 7551430515839948562}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: yellowBox
   m_TagString: Wall
   m_Icon: {fileID: 0}
