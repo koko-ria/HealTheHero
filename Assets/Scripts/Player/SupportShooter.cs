@@ -106,7 +106,7 @@ public class SupportShooter : MonoBehaviour
                 var hero = hit.collider.GetComponent<HeroAI>();
                 if (hero != null)
                 {
-                    hero.ApplySupportEffect(currentAmmo, effectDuration, potency, repulseRadius, repulseForce);
+                    //hero.ApplySupportEffect(currentAmmo, effectDuration, potency, repulseRadius, repulseForce);
                     Debug.Log($"Laser hit Hero with {currentAmmo} at {Time.time:F2}s");
                 }
             }

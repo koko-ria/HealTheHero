@@ -58,6 +58,7 @@
     <Compile Include="Assets\Scripts\Player\InputS\PlayersInput.cs" />
     <Compile Include="Assets\Scripts\Enemy\AttackPattern.cs" />
     <Compile Include="Assets\Scripts\Player\Player.cs" />
+    <Compile Include="Assets\Scripts\Player\RepulsiveEffect.cs" />
     <Compile Include="Assets\Scripts\Enemy\Projectile.cs" />
     <Compile Include="Assets\Scripts\Player\SupportShooter.cs" />
   </ItemGroup>

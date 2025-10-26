@@ -1,722 +1,543 @@
 using System.Collections;
-using System.Collections.Generic;
+using System.Collections.Generic; // Added for List
 using UnityEngine;
 using UnityEngine.AI;
-using System; // For MathF
+using UtilOfAi;
 
-[RequireComponent(typeof(NavMeshAgent), typeof(Rigidbody2D))]
 public class HeroAI : MonoBehaviour
 {
-    // ... (Keep all existing Header/SerializeField/public variables as they are) ...
 
-    // Public (Inspector)
+    [Header("Components")]
+    [SerializeField] private Animator animator; // Assign this in the Inspector!
+
     [Header("Targeting")]
-    // Changed nearestEnemy to a property for controlled access
-    private Transform _nearestEnemy;
-    public Transform GetCurrentTarget() => _nearestEnemy; // Public getter for EnemyBehavior/Detection
+    [SerializeField] private Transform enemy; // This will now be the *current* target enemy
+    [SerializeField] public float detectionRange = 10f; // Range for the detection collider
 
-    [Header("NavMesh")]
-    [SerializeField] private float navSampleDistance = 1f;
+    // Private list to keep track of enemies currently in detection range
+    private List<Transform> enemiesInRange = new List<Transform>();
+    private Transform nearestEnemyCandidate = null; // Used by detection script
+    private float nearestEnemyDistance = Mathf.Infinity; // Used by detection script
 
-    [Header("Roaming")]
-    [SerializeField] private float maxRoamDuration = 3f;
-    [SerializeField] private float minRoamDistance = 3f;
-    [SerializeField] private float maxRoamDistance = 9f;
 
-    [Header("Rush Attack")]
-    [SerializeField] private float rushDistanceBeyondTarget = 1.5f;
+    [Header("Idle Roaming Settings")]
+    [SerializeField] private float maxDurationOfRoaming = 3f;
+    [SerializeField] private float maxDistanceToRoam = 9f;
+    [SerializeField] private float minDistanceToRoam = 3f;
+
+    [Header("Attack Settings - Rush")]
+    [SerializeField] private float rushOverShootingDist = 5f;
     [SerializeField] private float rushDuration = 0.2f;
-    [SerializeField] private float rushCooldown = 1f;
+    [SerializeField] private float rushCooldown = 1.0f;
     [SerializeField] private int rushDamage = 1;
-    [SerializeField] private float rushDamageRadius = 0.6f; // New: Explicit radius for rush damage
+    [SerializeField] private float rushHitRadius = 1f;
 
-    [Header("Whirl Attack")]
-    [SerializeField] private float whirlRadius = 2.5f;
-    [SerializeField] private float whirlSpeedDegPerSec = 360f;
-    [SerializeField] private float whirlEntryTime = 0.4f;
-    [SerializeField] private float whirlDuration = 2.5f;
-    [SerializeField] private float whirlCooldown = 2f;
-    [SerializeField] private int whirlDamagePerTick = 1;
-    [SerializeField] private float whirlDamageTickInterval = 0.4f;
-    [SerializeField] private float whirlDamageRadius = 0.8f; // New: Explicit radius for whirl damage
+    [Header("Attack Settings - Whirl")]
+    [SerializeField] private float whirlRadius = 3f;
+    [SerializeField] private float whirlSpeed = 360f;
+    [SerializeField] private float whirlDuration = 3f;
+    [SerializeField] private float whirlEntryDuration = 0.5f;
+    [SerializeField] private float whirlCooldown = 2.0f;
+    [SerializeField] private int whirlDamage = 1;
+    [SerializeField] private float whirlDamageTickRate = 0.5f;
 
-    [Header("Stats")]
-    [SerializeField] private int baseHealth = 10;
-    [SerializeField] private float baseMoveSpeed = 3.5f;
-    [SerializeField] private float attackEngagementDistance = 1.5f;
+    [Header("Attack Settings - General")]
+    [SerializeField] private float heroAttackRange = 2f;
+    [SerializeField] private LayerMask enemyLayer;
 
-    [Header("Audio & Animation Placeholders")]
-    [SerializeField] private AudioSource audioSource;
-    [SerializeField] private AudioClip sfxRush;
-    [SerializeField] private AudioClip sfxWhirl;
-    [SerializeField] private AudioClip sfxBuffReceived;
-    [SerializeField] private Animator animator; // optional
+    [Header("Initial State")]
+    [SerializeField] private State startingState = State.Idle;
+    [SerializeField] private Attacks initialAttackType = Attacks.Rush;
 
-    // Private
-    private NavMeshAgent agent;
-    private Rigidbody2D rb;
-    private Collider2D mainCollider;
-    private HeroDetection heroDetection;
-
-    private float roamTimer;
-    private bool isRoaming;
-    private Coroutine currentAttackRoutine;
+    // --- Private Members ---
+    private NavMeshAgent navMeshAgent;
+    private float currentRoamingDuration;
+    private bool isCurrentlyRoaming = false;
+    private bool isRushing = false;
+    private bool isWhirling = false;
     private float lastRushTime = -Mathf.Infinity;
     private float lastWhirlTime = -Mathf.Infinity;
+    private Attacks currentAttackType;
+    public float health = 10;
 
-    private int currentHealth;
     public static HeroAI Instance { get; private set; }
 
-    // Buff state
-    private float damageMultiplier = 1f;
-    private float damageMultiplierExpireTime = 0f;
+    // --- Enums ---
+    public enum State
+    {
+        Idle,
+        Attacking,
+        NextArea
+    }
 
-    private float defenseMultiplier = 1f;
-    private float defenseExpireTime = 0f;
+    public enum Attacks
+    {
+        Rush,
+        Whirl,
+        Bomb
+    }
 
-    private float resistanceMultiplier = 1f;
-    private float resistanceExpireTime = 0f;
-
-    private enum State { Idle, Attacking, Stunned, Dying }
-    private State currentState = State.Idle;
-
-    private enum AttackType { Rush, Whirl }
-    private AttackType nextAttack = AttackType.Rush;
-
-    private float nearestEnemyDistance = Mathf.Infinity;
-
-    // Layer mask for damaging enemies (can be configured in Inspector)
-    [SerializeField] private LayerMask enemyLayer; // New field for clarity
-
+    // --- Unity Lifecycle Methods ---
     void Awake()
     {
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
+        }
+        else
+        {
+            Instance = this;
+        }
+
+        navMeshAgent = GetComponent<NavMeshAgent>();
+        animator = GetComponent<Animator>();
+
+        if (navMeshAgent == null)
+        {
+            Debug.LogError("NavMeshAgent component missing!", this);
+            enabled = false;
             return;
         }
-        Instance = this;
-
-        agent = GetComponent<NavMeshAgent>();
-        rb = GetComponent<Rigidbody2D>();
-        mainCollider = GetComponent<Collider2D>();
-        heroDetection = GetComponentInChildren<HeroDetection>();
-
-        if (agent == null) { Debug.LogError("HeroAI requires NavMeshAgent"); enabled = false; return; }
-        if (rb == null) { Debug.LogError("HeroAI requires Rigidbody2D"); enabled = false; return; }
-        if (mainCollider == null) { Debug.LogError("HeroAI requires a Collider2D"); enabled = false; return; }
-
-        agent.updateRotation = false;
-        agent.updateUpAxis = false;
-        agent.speed = baseMoveSpeed;
-
-        // Make sure enemyLayer is set up, fallback if not
-        if (enemyLayer.value == 0)
+        if (animator == null)
         {
-            enemyLayer = LayerMask.GetMask("Enemy");
-            Debug.LogWarning("HeroAI: 'enemyLayer' not set in Inspector. Defaulting to layer 'Enemy'.");
+            Debug.LogWarning("Animator component missing on HeroAI! Animations won't play. Ensure it's on this GameObject or assigned in Inspector.", this);
         }
-        
-        // IMPORTANT: Rigidbody2D Body Type in Inspector should be Kinematic
-        // This makes sure agent can control it and MovePosition works without physics fighting
-        rb.isKinematic = true; // Ensure this is true initially for agent to control
 
-        currentHealth = baseHealth;
-        roamTimer = maxRoamDuration;
-        Debug.Log("HeroAI Awake: Initialized.");
+        navMeshAgent.updateRotation = false;
+        navMeshAgent.updateUpAxis = false;
     }
 
-    void Update()
+    void Start()
     {
-        if (currentState == State.Dying) return;
+        currentRoamingDuration = maxDurationOfRoaming;
+        currentAttackType = initialAttackType;
 
-        UpdateBuffTimers();
-
-        if (_nearestEnemy != null && currentAttackRoutine == null)
+        if (!NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 1f, NavMesh.AllAreas))
         {
-            Vector3 lookDir = (_nearestEnemy.position - transform.position).normalized;
-            if (lookDir.x > 0) transform.localScale = new Vector3(1, 1, 1);
-            else if (lookDir.x < 0) transform.localScale = new Vector3(-1, 1, 1);
+            Debug.LogError("Hero is not placed on a NavMesh! Please bake NavMesh in Window > AI > Navigation.", this);
+            enabled = false;
+            return;
         }
 
-        switch (currentState)
+        // Initialize detection range for the detection collider if it's on a child object.
+        // The HeroDetection script will handle setting its collider's radius.
+    }
+
+    void FixedUpdate()
+    {
+        // Update the 'enemy' target based on `enemiesInRange`
+        UpdateCurrentTargetEnemy();
+
+        switch (startingState)
         {
             case State.Idle:
-                HandleIdle();
+                HandleIdleState();
                 break;
             case State.Attacking:
-                HandleAttacking();
+                HandleAttackingState();
                 break;
-            case State.Stunned:
-                // ...
+            case State.NextArea:
+                // Future implementation
+                break;
+            default:
+                Debug.LogWarning("Unknown state encountered: " + startingState);
                 break;
         }
     }
 
-    #region State Logic
+    // --- New Methods for HeroDetection Integration ---
 
-    private void HandleIdle()
+    /// <summary>
+    /// Called by HeroDetection to provide candidates for the nearest enemy.
+    /// </summary>
+    public void UpdateNearestEnemyCandidate(Transform potentialEnemy, float distance)
     {
-        if (_nearestEnemy != null)
+        // Add to list if not already present
+        if (!enemiesInRange.Contains(potentialEnemy))
         {
-            Debug.Log($"Hero: Detected {_nearestEnemy.name}, transitioning to Attacking state.");
-            currentState = State.Attacking;
-            EnableNavMeshAgent(true);
-            return;
+            enemiesInRange.Add(potentialEnemy);
         }
 
-        bool reachedDestination = !agent.pathPending && agent.remainingDistance < 0.1f && (!agent.hasPath || agent.velocity.sqrMagnitude == 0f);
-
-        if (isRoaming && reachedDestination)
+        // Update nearest candidate if this one is closer
+        if (distance < nearestEnemyDistance)
         {
-            isRoaming = false;
-        }
-
-        if (isRoaming)
-        {
-            roamTimer -= Time.deltaTime;
-            if (roamTimer <= 0f)
-            {
-                isRoaming = false;
-            }
-        }
-        else
-        {
-            StartRoamToRandomPoint();
+            nearestEnemyCandidate = potentialEnemy;
+            nearestEnemyDistance = distance;
         }
     }
 
-    private void HandleAttacking()
+    /// <summary>
+    /// Called by HeroDetection when an enemy leaves the detection range.
+    /// </summary>
+    public void ClearNearestEnemy(Transform departingEnemy)
     {
-        // If target is lost, go back to idle.
-        if (_nearestEnemy == null)
+        enemiesInRange.Remove(departingEnemy);
+        // If the departing enemy was our current target or nearest candidate,
+        // we need to re-evaluate.
+        if (enemy == departingEnemy || nearestEnemyCandidate == departingEnemy)
         {
-            Debug.Log("Hero: Lost target, transitioning to Idle state.");
-            currentState = State.Idle;
-            StopCurrentAttack();
-            EnableNavMeshAgent(false); // Stop agent movement
-            return;
-        }
-
-        // If an attack is currently running, let it finish.
-        if (currentAttackRoutine != null)
-        {
-            // Debug.Log("Hero: Attack routine in progress, waiting...");
-            return;
-        }
-
-        float distToEnemy = Vector2.Distance(transform.position, _nearestEnemy.position);
-
-        // Movement Phase: Move towards enemy if too far
-        if (distToEnemy > attackEngagementDistance)
-        {
-            EnableNavMeshAgent(true); // Ensure agent is enabled for movement
-            agent.SetDestination(_nearestEnemy.position);
-            // Debug.Log($"Hero: Moving towards {_nearestEnemy.name}. Distance: {distToEnemy:F2}");
-            return; // Don't try to attack while moving to engage
-        }
-
-        // Attack Phase: Stop movement and attempt an attack
-        EnableNavMeshAgent(false); // Stop agent movement to perform attack
-
-        // Try to perform the next attack in sequence
-        if (nextAttack == AttackType.Rush)
-        {
-            if (Time.time >= lastRushTime + rushCooldown)
-            {
-                Debug.Log($"Hero: Initiating Rush attack on {_nearestEnemy.name}.");
-                currentAttackRoutine = StartCoroutine(RushRoutine(_nearestEnemy));
-                lastRushTime = Time.time;
-                nextAttack = AttackType.Whirl; // Cycle to the next attack type
-            }
-            else
-            {
-                // Debug.Log($"Hero: Rush on cooldown. Next Rush in {lastRushTime + rushCooldown - Time.time:F2}s");
-            }
-        }
-        else if (nextAttack == AttackType.Whirl)
-        {
-            if (Time.time >= lastWhirlTime + whirlCooldown)
-            {
-                Debug.Log($"Hero: Initiating Whirl attack on {_nearestEnemy.name}.");
-                currentAttackRoutine = StartCoroutine(WhirlRoutine(_nearestEnemy));
-                lastWhirlTime = Time.time;
-                nextAttack = AttackType.Rush; // Cycle to the next attack type
-            }
-            else
-            {
-                // Debug.Log($"Hero: Whirl on cooldown. Next Whirl in {lastWhirlTime + whirlCooldown - Time.time:F2}s");
-            }
+            nearestEnemyCandidate = null;
+            nearestEnemyDistance = Mathf.Infinity;
+            // Force an update to find a new target if available
+            UpdateCurrentTargetEnemy();
         }
     }
 
-    #endregion
-
-    #region NavMeshAgent / Rigidbody Control
-
-    private void EnableNavMeshAgent(bool enable)
+    /// <summary>
+    /// Decides the primary 'enemy' target from the list of detected enemies.
+    /// Called periodically (e.g., in FixedUpdate).
+    /// </summary>
+    private void UpdateCurrentTargetEnemy()
     {
-        if (agent.enabled != enable)
-        {
-            agent.enabled = enable;
-            // When agent is enabled, rb MUST be kinematic for it to work correctly.
-            // When agent is disabled, rb should still be kinematic if we plan to use MovePosition (like in attacks).
-            // We'll manage rb.isKinematic explicitly within attack coroutines.
-            rb.isKinematic = enable;
+        // Clean up any null references (destroyed enemies) from the list
+        enemiesInRange.RemoveAll(t => t == null);
 
-            if (!enable)
+        if (enemiesInRange.Count > 0)
+        {
+            // Find the actual nearest enemy from the list
+            Transform currentNearest = null;
+            float currentMinDistance = Mathf.Infinity;
+
+            foreach (Transform potentialEnemy in enemiesInRange)
             {
-                agent.isStopped = true;
-                agent.ResetPath();
-            }
-            else
-            {
-                agent.isStopped = false;
-            }
-            // Debug.Log($"Hero: NavMeshAgent enabled: {enable}, Rigidbody Kinematic: {rb.isKinematic}");
-        }
-    }
-
-    #endregion
-
-    #region Roaming
-
-    private void StartRoamToRandomPoint()
-    {
-        if (!agent.isOnNavMesh)
-        {
-            Debug.LogWarning("Hero: Not on NavMesh, cannot roam.");
-            EnableNavMeshAgent(false);
-            return;
-        }
-
-        Vector2 randDir = UnityEngine.Random.insideUnitCircle.normalized;
-        float dist = UnityEngine.Random.Range(minRoamDistance, maxRoamDistance);
-        Vector3 candidate = transform.position + (Vector3)(randDir * dist);
-
-        NavMeshHit hit;
-        if (NavMesh.SamplePosition(candidate, out hit, navSampleDistance * 5f, NavMesh.AllAreas))
-        {
-            isRoaming = true;
-            roamTimer = UnityEngine.Random.Range(1f, maxRoamDuration);
-            EnableNavMeshAgent(true);
-            agent.SetDestination(hit.position);
-            Debug.Log($"Hero: Roaming to {hit.position}.");
-        }
-        else
-        {
-            isRoaming = false;
-            EnableNavMeshAgent(false);
-            Debug.LogWarning("Hero: Could not find a valid roam point on NavMesh.");
-        }
-    }
-
-    #endregion
-
-    #region Attacks (Coroutines)
-
-    private IEnumerator RushRoutine(Transform target)
-    {
-        Debug.Log("Hero: RushRoutine started.");
-        if (target == null || target.gameObject == null || !target.gameObject.activeInHierarchy) // Check for valid target
-        {
-            Debug.Log("Hero: Rush target invalid or destroyed, aborting.");
-            currentAttackRoutine = null;
-            EnableNavMeshAgent(true);
-            yield break;
-        }
-
-        animator?.SetTrigger("Rush");
-        if (audioSource != null && sfxRush != null) audioSource.PlayOneShot(sfxRush);
-
-        // Ensure agent is off. rb.isKinematic will be handled here.
-        EnableNavMeshAgent(false);
-        rb.isKinematic = true; // Explicitly set kinematic for MovePosition
-
-        Vector3 startPos = transform.position;
-        Vector3 dirToTarget = (target.position - transform.position).normalized;
-        Vector3 endPoint = target.position + dirToTarget * rushDistanceBeyondTarget;
-
-        NavMeshHit navHit;
-        // Sample near the target's position, not far beyond, for a safer dash endpoint
-        if (NavMesh.SamplePosition(endPoint, out navHit, navSampleDistance * 2f, NavMesh.AllAreas))
-        {
-            endPoint = navHit.position;
-        } else {
-             // If the calculated endpoint is off-mesh, try to dash only to the target's position
-             if (NavMesh.SamplePosition(target.position, out navHit, navSampleDistance * 2f, NavMesh.AllAreas))
-             {
-                 endPoint = navHit.position;
-             } else {
-                // If even the target's position isn't on NavMesh, abort or simplify
-                Debug.LogWarning("Hero: Rush target and endPoint not on NavMesh, dashing directly towards target.");
-                // As a last resort, just go straight towards target position
-                // This might put Hero off NavMesh but keeps the attack going
-                endPoint = target.position;
-             }
-        }
-
-
-        float elapsed = 0f;
-        while (elapsed < rushDuration)
-        {
-            if (target == null || target.gameObject == null || !target.gameObject.activeInHierarchy) // Mid-attack target check
-            {
-                 Debug.Log("Hero: Rush target lost mid-attack, aborting.");
-                 break; // Exit the loop to proceed to cleanup
-            }
-
-            elapsed += Time.deltaTime;
-            float t = Mathf.SmoothStep(0f, 1f, elapsed / rushDuration);
-            rb.MovePosition(Vector3.Lerp(startPos, endPoint, t));
-            yield return null;
-        }
-
-        // Ensure final position is set if loop completed
-        rb.MovePosition(endPoint);
-
-        // Damage enemies in a circle at the Hero's final position
-        DealDamageInArea(transform.position, rushDamageRadius, Mathf.CeilToInt(rushDamage * damageMultiplier), "Rush");
-
-        // --- Cleanup ---
-        currentAttackRoutine = null;
-        // Restore agent control, which also sets rb.isKinematic = true
-        EnableNavMeshAgent(true);
-        Debug.Log("Hero: RushRoutine finished.");
-    }
-
-    private IEnumerator WhirlRoutine(Transform target)
-    {
-        Debug.Log("Hero: WhirlRoutine started.");
-        if (target == null || target.gameObject == null || !target.gameObject.activeInHierarchy) // Check for valid target
-        {
-            Debug.Log("Hero: Whirl target invalid or destroyed, aborting.");
-            currentAttackRoutine = null;
-            EnableNavMeshAgent(true);
-            yield break;
-        }
-
-        animator?.SetTrigger("Whirl");
-        if (audioSource != null && sfxWhirl != null) audioSource.PlayOneShot(sfxWhirl);
-
-        // Ensure agent is off. rb.isKinematic will be handled here.
-        EnableNavMeshAgent(false);
-        rb.isKinematic = true; // Explicitly set kinematic for MovePosition
-
-        float elapsed = 0f;
-        float angle = 0f;
-        // Store the target's *current* position at the start of the whirl
-        // This is important if the target moves significantly, the hero will still orbit that initial point
-        Vector3 whirlCenter = target.position;
-
-        // Entry ramp up (radius 0 -> full)
-        while (elapsed < whirlEntryTime)
-        {
-            if (target == null || target.gameObject == null || !target.gameObject.activeInHierarchy) // Mid-attack target check
-            {
-                 Debug.Log("Hero: Whirl target lost mid-attack, aborting entry.");
-                 break;
-            }
-            elapsed += Time.deltaTime;
-            float t = elapsed / whirlEntryTime;
-            float currentRadius = Mathf.SmoothStep(0f, whirlRadius, t);
-            angle += whirlSpeedDegPerSec * Time.deltaTime;
-
-            Vector3 offset = new Vector3(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad), 0f) * currentRadius;
-            rb.MovePosition(whirlCenter + offset); // Orbit around the initial target position
-            yield return null;
-        }
-
-        // Full whirl phase
-        elapsed = 0f;
-        float damageTickTimer = 0f;
-        while (elapsed < whirlDuration)
-        {
-            if (target == null || target.gameObject == null || !target.gameObject.activeInHierarchy) // Mid-attack target check
-            {
-                 Debug.Log("Hero: Whirl target lost mid-attack, aborting whirl phase.");
-                 break;
-            }
-
-            elapsed += Time.deltaTime;
-            angle += whirlSpeedDegPerSec * Time.deltaTime;
-
-            Vector3 offset = new Vector3(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad), 0f) * whirlRadius;
-            rb.MovePosition(whirlCenter + offset); // Continue to orbit the initial target position
-
-            damageTickTimer -= Time.deltaTime;
-            if (damageTickTimer <= 0f)
-            {
-                DealDamageInArea(transform.position, whirlDamageRadius, Mathf.CeilToInt(whirlDamagePerTick * damageMultiplier), "Whirl Tick");
-                damageTickTimer = whirlDamageTickInterval;
-            }
-
-            yield return null;
-        }
-
-        // --- Cleanup ---
-        currentAttackRoutine = null;
-        EnableNavMeshAgent(true); // Restore agent control
-        Debug.Log("Hero: WhirlRoutine finished.");
-    }
-
-    private void DealDamageInArea(Vector3 center, float radius, int damage, string attackName)
-    {
-        // Debug.DrawRay(center, Vector3.up * radius, Color.red, 1f); // Visual for debugging
-        Collider2D[] cols = Physics2D.OverlapCircleAll(center, radius, enemyLayer); // Use the new enemyLayer
-        foreach (var c in cols)
-        {
-            // Ensure we don't hit ourselves or friendly units if we expand enemyLayer later
-            if (c.CompareTag("Enemy"))
-            {
-                var enemy = c.GetComponent<EnemyBehavior>();
-                if (enemy != null)
+                if (potentialEnemy == null) continue; // Should already be handled by RemoveAll, but good for safety
+                float dist = Vector3.Distance(transform.position, potentialEnemy.position);
+                if (dist < currentMinDistance)
                 {
-                    enemy.TakeDamage(damage);
-                    Debug.Log($"Hero: {attackName} hit {c.name} for {damage} damage.");
+                    currentMinDistance = dist;
+                    currentNearest = potentialEnemy;
                 }
             }
-        }
-    }
 
-    private void StopCurrentAttack()
-    {
-        if (currentAttackRoutine != null)
+            enemy = currentNearest; // Set our main 'enemy' target
+            if (startingState != State.Attacking)
+            {
+                startingState = State.Attacking; // Transition to attacking if an enemy is found
+                Debug.Log("Enemy detected via detection script! Transitioning to Attacking state.");
+                lastRushTime = Time.time - rushCooldown;
+                lastWhirlTime = Time.time - whirlCooldown;
+            }
+        }
+        else // No enemies in range
         {
-            StopCoroutine(currentAttackRoutine);
-            currentAttackRoutine = null;
-            Debug.Log("Hero: Stopped current attack routine.");
+            enemy = null;
+            if (startingState == State.Attacking)
+            {
+                startingState = State.Idle; // Transition to idle if no enemies are left
+                Debug.Log("No enemies in range, transitioning to Idle state.");
+                StopAllAttackCoroutines();
+            }
         }
-        EnableNavMeshAgent(true); // Ensure agent is re-enabled and rb.isKinematic is true
     }
 
-    #endregion
+    // --- State Handlers ---
+    private void HandleIdleState()
+    {
+        // If an enemy is detected, UpdateCurrentTargetEnemy will transition state
+        if (enemy != null) return; // Don't roam if an enemy has been assigned
 
-    #region Damage & Buffs
+        if (isCurrentlyRoaming)
+        {
+            currentRoamingDuration -= Time.fixedDeltaTime;
+            if (currentRoamingDuration <= 0)
+            {
+                currentRoamingDuration = maxDurationOfRoaming;
+                isCurrentlyRoaming = false;
+                if (navMeshAgent.enabled) navMeshAgent.isStopped = true; // Stop agent after roaming duration
+            }
+        }
+        else
+        {
+            StartIdleRoaming();
+        }
+    }
 
+    private void HandleAttackingState()
+    {
+        // If enemy becomes null during FixedUpdate (e.g., destroyed, or left range), UpdateCurrentTargetEnemy will transition to Idle.
+        if (enemy == null) return;
+
+        // Only attempt attacks if we are not currently executing an attack (Rush or Whirl)
+        if (!isRushing && !isWhirling)
+        {
+            float distanceToEnemy = Vector3.Distance(transform.position, enemy.position);
+
+            if (distanceToEnemy > heroAttackRange)
+            {
+                // Move towards the enemy if outside attack range
+                if (navMeshAgent.enabled && navMeshAgent.isOnNavMesh)
+                {
+                    navMeshAgent.isStopped = false;
+                    navMeshAgent.SetDestination(enemy.position);
+                }
+            }
+            else // Within attack range, stop and attempt attack
+            {
+                if (navMeshAgent.enabled) navMeshAgent.isStopped = true;
+                AttemptAttack(currentAttackType);
+            }
+        }
+        else
+        {
+            // If an attack is in progress, the coroutine is handling movement,
+            // and NavMeshAgent is disabled. Do nothing here.
+        }
+    }
+
+    // --- Attack Logic (same as before) ---
+    private void AttemptAttack(Attacks attackToAttempt)
+    {
+        switch (attackToAttempt)
+        {
+            case Attacks.Rush:
+                if (Time.time >= lastRushTime + rushCooldown)
+                {
+                    StartRush();
+                    currentAttackType = Attacks.Whirl;
+                }
+                break;
+            case Attacks.Whirl:
+                if (Time.time >= lastWhirlTime + whirlCooldown)
+                {
+                    StartWhirl();
+                    currentAttackType = Attacks.Rush;
+                }
+                break;
+            case Attacks.Bomb:
+                // Future implementation
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void StartRush()
+    {
+        if (isRushing || enemy == null) return;
+
+        Vector2 dir = (enemy.position - transform.position).normalized;
+        Vector3 targetPos = enemy.position + (Vector3)(dir * rushOverShootingDist);
+
+        if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, 1f, NavMesh.AllAreas))
+        {
+            Debug.Log("Hero: Launching Rush Attack!");
+            StartCoroutine(RushingAttackCoroutine(hit.position));
+            lastRushTime = Time.time;
+        }
+        else
+        {
+            Debug.LogWarning("Rush target position not on NavMesh! Trying original enemy position instead.");
+            if (NavMesh.SamplePosition(enemy.position, out hit, 1f, NavMesh.AllAreas))
+            {
+                StartCoroutine(RushingAttackCoroutine(hit.position));
+                lastRushTime = Time.time;
+            }
+            else
+            {
+                Debug.LogWarning("Enemy position also not on NavMesh, cannot rush.");
+            }
+        }
+    }
+
+    private void StartWhirl()
+    {
+        if (isWhirling || enemy == null) return;
+
+        Debug.Log("Hero: Launching Whirl Attack!");
+        StartCoroutine(WhirlingAttackCoroutine());
+        lastWhirlTime = Time.time;
+    }
+
+    // --- Coroutines for Attacks (same as before) ---
+    private IEnumerator RushingAttackCoroutine(Vector3 target)
+    {
+        isRushing = true;
+        if (navMeshAgent.enabled) navMeshAgent.isStopped = true;
+        navMeshAgent.enabled = false;
+
+        Vector3 startPos = transform.position;
+        float elapsed = 0f;
+
+        if (animator != null) animator.SetTrigger("Rush");
+
+        while (elapsed < rushDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / rushDuration;
+            t = t * t * (3f - 2f * t);
+            transform.position = Vector3.Lerp(startPos, target, t);
+            yield return null;
+        }
+
+        transform.position = target;
+
+        Collider2D[] hitEnemies = Physics2D.OverlapCircleAll(transform.position, rushHitRadius, enemyLayer);
+        foreach (Collider2D hit in hitEnemies)
+        {
+            EnemyBehavior enemyComponent = hit.GetComponent<EnemyBehavior>();
+            if (enemyComponent != null && hit.transform != transform) // Ensure hero doesn't damage itself
+            {
+                enemyComponent.TakeDamage(rushDamage);
+                Debug.Log($"Hero dealt {rushDamage} Rush damage to {hit.name}");
+            }
+        }
+
+        navMeshAgent.enabled = true;
+        isRushing = false;
+    }
+
+    private IEnumerator WhirlingAttackCoroutine()
+    {
+        if (enemy == null)
+        {
+            Debug.LogWarning("Cannot start whirl - no enemy in range!");
+            yield break;
+        }
+
+        isWhirling = true;
+        if (navMeshAgent.enabled) navMeshAgent.isStopped = true;
+        navMeshAgent.enabled = false;
+
+        if (animator != null) animator.SetTrigger("Whirl");
+
+        Vector3 whirlCenterAtStart = enemy.position;
+        float elapsed = 0f;
+        float currentAngle = 0f;
+
+        while (elapsed < whirlEntryDuration)
+        {
+            Vector3 currentWhirlCenter = (enemy != null) ? enemy.position : whirlCenterAtStart;
+            elapsed += Time.deltaTime;
+            float t = elapsed / whirlEntryDuration;
+            float easedT = t * t * (3f - 2f * t);
+
+            float currentRadius = Mathf.Lerp(0f, whirlRadius, easedT);
+            currentAngle += whirlSpeed * Time.deltaTime;
+
+            Vector3 offset = new Vector3(
+                Mathf.Cos(currentAngle * Mathf.Deg2Rad) * currentRadius,
+                Mathf.Sin(currentAngle * Mathf.Deg2Rad) * currentRadius,
+                0
+            );
+            transform.position = currentWhirlCenter + offset;
+            yield return null;
+        }
+
+        currentAngle = (currentAngle % 360);
+        elapsed = 0f;
+
+        float damageTickTimer = 0f;
+
+        while (elapsed < whirlDuration)
+        {
+            Vector3 currentWhirlCenter = (enemy != null) ? enemy.position : whirlCenterAtStart;
+
+            elapsed += Time.deltaTime;
+            currentAngle += whirlSpeed * Time.deltaTime;
+
+            Vector3 offset = new Vector3(
+                Mathf.Cos(currentAngle * Mathf.Deg2Rad) * whirlRadius,
+                Mathf.Sin(currentAngle * Mathf.Deg2Rad) * whirlRadius,
+                0
+            );
+            transform.position = currentWhirlCenter + offset;
+
+            damageTickTimer += Time.deltaTime;
+            if (damageTickTimer >= whirlDamageTickRate)
+            {
+                Collider2D[] hitEnemies = Physics2D.OverlapCircleAll(transform.position, whirlRadius, enemyLayer);
+                foreach (Collider2D hit in hitEnemies)
+                {
+                    EnemyBehavior enemyComponent = hit.GetComponent<EnemyBehavior>();
+                    if (enemyComponent != null && hit.transform != transform) // Ensure hero doesn't damage itself
+                    {
+                        enemyComponent.TakeDamage(whirlDamage);
+                        Debug.Log($"Hero dealt {whirlDamage} Whirl damage to {hit.name}");
+                    }
+                }
+                damageTickTimer = 0f;
+            }
+
+            yield return null;
+        }
+
+        navMeshAgent.enabled = true;
+        isWhirling = false;
+    }
+
+    // --- Idle Roaming Methods (same as before) ---
+    private void StartIdleRoaming()
+    {
+        if (!navMeshAgent.isOnNavMesh)
+        {
+            Debug.LogWarning("NavMeshAgent is not on NavMesh, cannot roam!", this);
+            isCurrentlyRoaming = false;
+            return;
+        }
+
+        isCurrentlyRoaming = true;
+        Vector3 randDir = UtilOfAi.Utility.Instance.RandomDirection();
+
+        Vector3 targetPos = transform.position + randDir * UnityEngine.Random.Range(minDistanceToRoam, maxDistanceToRoam);
+
+        if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+        {
+            navMeshAgent.isStopped = false;
+            navMeshAgent.SetDestination(hit.position);
+        }
+        else
+        {
+            Debug.LogWarning("Could not find valid NavMesh position for roaming!", this);
+            isCurrentlyRoaming = false;
+        }
+    }
+
+    // --- Damage and Death (same as before) ---
     public void TakeDamage(int damage)
     {
-        if (currentState == State.Dying) return; // Prevent damage while dying
+        health -= damage;
+        Debug.Log($"Hero took {damage} damage. Health: {health}");
 
-        int finalDamage = Mathf.CeilToInt(damage * defenseMultiplier);
-        currentHealth -= finalDamage;
-        Debug.Log($"Hero took {finalDamage} damage. Current Health: {currentHealth}");
-
-        animator?.SetTrigger("Hit");
-
-        if (currentHealth <= 0)
+        if (health <= 0)
         {
             Die();
         }
     }
 
-    private void Die()
+    void Die()
     {
-        if (currentState == State.Dying) return; // Only die once
-        currentState = State.Dying;
         Debug.Log("Hero Died!");
-
-        // Stop all movement and detection
-        StopCurrentAttack();
-        EnableNavMeshAgent(false); // Ensure agent is off and rb is non-kinematic for death animation
-        rb.isKinematic = false; // Allow physics for death reaction if desired
-
-        if (heroDetection != null)
-        {
-            heroDetection.enabled = false; // Disable detection immediately
-            // Optionally, make its collider a trigger or disable it
-            if (heroDetection.GetComponent<CircleCollider2D>() != null)
-            {
-                heroDetection.GetComponent<CircleCollider2D>().enabled = false;
-            }
-        }
-
-        // Ensure main collider becomes a trigger so it doesn't block other things after death
-        if (mainCollider != null)
-        {
-            mainCollider.isTrigger = true;
-            mainCollider.enabled = false; // Disable collision
-        }
-
-
-        animator?.SetTrigger("Die");
-        // Destroy the GameObject after a short delay to allow death animation to play
-        Destroy(gameObject, 1.5f); // Adjust delay as needed for your animation
-
-        // Optional: Notify a Game Manager that the Hero has died
-        // GameManager.Instance.HeroDied();
+        Destroy(gameObject);
     }
 
-    public void ApplySupportEffect(SupportShooter.AmmoType ammo, float effectDuration, int potency = 1, float repulseRadius = 2f, float repulseForce = 5f)
+    // --- Helper Methods (same as before, with minor adjustment to StopCoroutine) ---
+    private void StopAllAttackCoroutines()
     {
-        if (audioSource != null && sfxBuffReceived != null) audioSource.PlayOneShot(sfxBuffReceived);
+        StopCoroutine("RushingAttackCoroutine");
+        StopCoroutine("WhirlingAttackCoroutine");
+        isRushing = false;
+        isWhirling = false;
 
-        switch (ammo)
+        if (!navMeshAgent.enabled)
         {
-            case SupportShooter.AmmoType.Heal:
-                currentHealth = Mathf.Min(currentHealth + potency, baseHealth);
-                Debug.Log($"Hero healed for {potency}. Current Health: {currentHealth}");
-                break;
-            case SupportShooter.AmmoType.BuffDamage:
-                damageMultiplier = 1f + potency;
-                damageMultiplierExpireTime = Time.time + effectDuration;
-                Debug.Log($"Hero Damage Buff: {damageMultiplier}x for {effectDuration}s");
-                break;
-            case SupportShooter.AmmoType.BuffDefence:
-                defenseMultiplier = 1f - (0.2f * potency);
-                defenseMultiplier = Mathf.Max(0f, defenseMultiplier);
-                defenseExpireTime = Time.time + effectDuration;
-                Debug.Log($"Hero Defense Buff: {defenseMultiplier}x incoming damage for {effectDuration}s");
-                break;
-            case SupportShooter.AmmoType.BuffResistance:
-                resistanceMultiplier = 1f - (0.2f * potency);
-                resistanceMultiplier = Mathf.Max(0f, resistanceMultiplier);
-                resistanceExpireTime = Time.time + effectDuration;
-                Debug.Log($"Hero Resistance Buff: {resistanceMultiplier}x incoming elemental damage for {effectDuration}s");
-                break;
-            case SupportShooter.AmmoType.Repulse:
-                Collider2D[] cols = Physics2D.OverlapCircleAll(transform.position, repulseRadius);
-                foreach (var c in cols)
-                {
-                    if (c.CompareTag("Enemy"))
-                    {
-                        Rigidbody2D enemyRb = c.attachedRigidbody; // Get Rigidbody2D from enemy
-                        if (enemyRb != null)
-                        {
-                            Vector2 dir = (c.transform.position - transform.position).normalized;
-                            enemyRb.AddForce(dir * repulseForce, ForceMode2D.Impulse);
-                            Debug.Log($"Hero repulsed {c.name}");
-                        }
-                    }
-                }
-                Debug.Log($"Hero used Repulse: Radius {repulseRadius}, Force {repulseForce}");
-                break;
+            navMeshAgent.enabled = true;
         }
+        navMeshAgent.isStopped = true;
     }
 
-    private void UpdateBuffTimers()
-    {
-        if (damageMultiplierExpireTime > 0f && Time.time > damageMultiplierExpireTime)
-        {
-            damageMultiplier = 1f;
-            damageMultiplierExpireTime = 0f;
-            Debug.Log("Hero Damage Buff expired.");
-        }
-
-        if (defenseExpireTime > 0f && Time.time > defenseExpireTime)
-        {
-            defenseMultiplier = 1f;
-            defenseExpireTime = 0f;
-            Debug.Log("Hero Defense Buff expired.");
-        }
-
-        if (resistanceExpireTime > 0f && Time.time > resistanceExpireTime)
-        {
-            resistanceMultiplier = 1f;
-            resistanceExpireTime = 0f;
-            Debug.Log("Hero Resistance Buff expired.");
-        }
-    }
-
-    #endregion
-
-    #region Detection Helpers
-    // This method now actually sets the target if it's new or closer
-    public void UpdateNearestEnemyCandidate(Transform enemy, float distance)
-    {
-        if (currentState == State.Dying) return; // No new targets if dying
-
-        if (enemy == null)
-        {
-            ClearNearestEnemy(_nearestEnemy); // Clear if null passed
-            return;
-        }
-
-        // Only update if it's a new target, or if the current target is null, or if the new enemy is closer
-        if (_nearestEnemy == null || enemy != _nearestEnemy || distance < nearestEnemyDistance)
-        {
-            _nearestEnemy = enemy;
-            nearestEnemyDistance = distance;
-            // Transition to attacking if we find a target
-            if (currentState != State.Attacking)
-            {
-                currentState = State.Attacking;
-                EnableNavMeshAgent(true); // Ensure agent is enabled and ready to move
-                Debug.Log($"Hero: New nearest enemy candidate - {enemy.name} at {distance:F2}. Transitioning to Attacking.");
-            }
-            else
-            {
-                // If already attacking, just update path to new (potentially closer) target
-                if (agent.enabled && agent.isOnNavMesh)
-                {
-                    agent.SetDestination(_nearestEnemy.position);
-                }
-                Debug.Log($"Hero: Updated target to {enemy.name} at {distance:F2}.");
-            }
-        }
-    }
-
-    public void ClearNearestEnemy(Transform t)
-    {
-        // Only clear if the target being removed IS the current nearest enemy
-        if (_nearestEnemy == t && currentState != State.Dying)
-        {
-            _nearestEnemy = null;
-            nearestEnemyDistance = Mathf.Infinity; // Use MathF for float
-            // Transition to Idle when target is lost
-            currentState = State.Idle;
-            StopCurrentAttack(); // Stop any attack that might be aimed at the lost target
-            EnableNavMeshAgent(false); // Stop agent movement
-            Debug.Log($"Hero: Current nearest enemy {t?.name ?? "null"} left detection range. Transitioning to Idle.");
-        }
-        else if (t == null && _nearestEnemy != null)
-        {
-            // If we're told to clear a null target, but we still have one, don't clear.
-            // This case handles when the RecheckNearestEnemy passes null but Hero still has a target.
-            // Debug.Log("Hero: ClearNearestEnemy received null, but still has a target. Ignoring.");
-        }
-    }
-
-    #endregion
-// Adjust OnDrawGizmosSelected to use _nearestEnemy instead of nearestEnemy
     void OnDrawGizmosSelected()
     {
-        // ... (previous gizmo code) ...
+        Gizmos.color = Color.magenta;
+        Gizmos.DrawWireSphere(transform.position, heroAttackRange);
 
-        if (_nearestEnemy != null) // Changed from nearestEnemy
-        {
-            Gizmos.color = Color.red;
-            Gizmos.DrawLine(transform.position, _nearestEnemy.position);
-            Gizmos.DrawWireSphere(_nearestEnemy.position, 0.4f); // Mark target with a sphere
-            
-            // Draw NavMeshAgent path if available
-            if (agent != null && agent.enabled && agent.hasPath)
-            {
-                Gizmos.color = Color.blue;
-                Vector3[] pathCorners = agent.path.corners;
-                for (int i = 0; i < pathCorners.Length - 1; i++)
-                {
-                    Gizmos.DrawLine(pathCorners[i], pathCorners[i+1]);
-                    Gizmos.DrawWireSphere(pathCorners[i], 0.1f);
-                }
-                if (pathCorners.Length > 0)
-                {
-                    Gizmos.DrawWireSphere(pathCorners[pathCorners.Length - 1], 0.1f);
-                }
-            }
-        }
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, rushHitRadius);
 
-        // Draw Rush damage radius
-        if (currentState == State.Attacking && currentAttackRoutine != null && nextAttack == AttackType.Whirl) // If Rush was just performed
-        {
-             Gizmos.color = Color.yellow;
-             Gizmos.DrawWireSphere(transform.position, rushDamageRadius);
-        }
-        // Draw Whirl damage radius
-        if (currentState == State.Attacking && currentAttackRoutine != null && nextAttack == AttackType.Rush) // If Whirl is active/just performed
-        {
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawWireSphere(transform.position, whirlDamageRadius);
-        }
+        Gizmos.color = Color.blue;
+        Gizmos.DrawWireSphere(transform.position, whirlRadius);
+
+        // Visualize detection range as well (controlled by HeroAI, used by HeroDetection)
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, detectionRange);
     }
-}   
+}

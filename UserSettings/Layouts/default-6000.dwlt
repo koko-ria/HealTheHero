@@ -192,7 +192,7 @@ MonoBehaviour:
     x: 0
     y: 0
     width: 934.39996
-    height: 480
+    height: 418.4
   m_MinSize: {x: 202, y: 226}
   m_MaxSize: {x: 4002, y: 4026}
   m_ActualView: {fileID: 11}
@@ -219,11 +219,11 @@ MonoBehaviour:
   m_Position:
     serializedVersion: 2
     x: 0
-    y: 480
+    y: 418.4
     width: 934.39996
-    height: 244.79999
-  m_MinSize: {x: 102, y: 126}
-  m_MaxSize: {x: 4002, y: 4026}
+    height: 306.4
+  m_MinSize: {x: 100, y: 100}
+  m_MaxSize: {x: 4000, y: 4000}
   m_ActualView: {fileID: 17}
   m_Panes:
   - {fileID: 16}
@@ -278,10 +278,10 @@ MonoBehaviour:
     m_TextWithWhitespace: "Scene\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 1
-    y: 24
+    x: 203.2
+    y: 79.200005
     width: 932.39996
-    height: 454
+    height: 392.4
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -296,12 +296,12 @@ MonoBehaviour:
       displayed: 1
       id: unity-transform-toolbar
       index: 0
-      contents: '{"m_Layout":2,"m_Collapsed":false,"m_Folded":false,"m_Floating":false,"m_FloatingSnapOffset":{"x":45.0,"y":100.0},"m_SnapOffsetDelta":{"x":0.0,"y":0.0},"m_FloatingSnapCorner":0,"m_Size":{"x":0.0,"y":0.0},"m_SizeOverridden":false}'
+      contents: '{"m_Layout":2,"m_Collapsed":false,"m_Folded":false,"m_Floating":false,"m_FloatingSnapOffset":{"x":45.0,"y":-292.79998779296877},"m_SnapOffsetDelta":{"x":0.0,"y":0.0},"m_FloatingSnapCorner":2,"m_Size":{"x":0.0,"y":0.0},"m_SizeOverridden":false}'
       floating: 0
       collapsed: 0
-      snapOffset: {x: 45, y: 100}
+      snapOffset: {x: 45, y: -292.8}
       snapOffsetDelta: {x: 0, y: 0}
-      snapCorner: 0
+      snapCorner: 2
       layout: 2
       size: {x: 0, y: 0}
       sizeOverridden: 0
@@ -932,7 +932,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 24
+    y: 79.200005
     width: 202.2
     height: 698.8
   m_SerializedDataModeController:
@@ -949,9 +949,9 @@ MonoBehaviour:
   m_SceneHierarchy:
     m_TreeViewState:
       scrollPos: {x: 0, y: 0}
-      m_SelectedIDs: 
-      m_LastClickedID: 0
-      m_ExpandedIDs: cafaffffdafaffff00fbffffdeb600001eb70000
+      m_SelectedIDs: cafaffff
+      m_LastClickedID: -1334
+      m_ExpandedIDs: 00fbffff
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -1000,7 +1000,7 @@ MonoBehaviour:
     x: 203.2
     y: 79.200005
     width: 932.39996
-    height: 454
+    height: 392.4
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -1055,22 +1055,22 @@ MonoBehaviour:
       x: 0
       y: 21
       width: 932.39996
-      height: 433
-    m_Scale: {x: 0.37586805, y: 0.37586805}
-    m_Translation: {x: 466.19998, y: 216.5}
+      height: 371.4
+    m_Scale: {x: 0.32239583, y: 0.32239583}
+    m_Translation: {x: 466.19998, y: 185.7}
     m_MarginLeft: 0
     m_MarginRight: 0
     m_MarginTop: 0
     m_MarginBottom: 0
     m_LastShownAreaInsideMargins:
       serializedVersion: 2
-      x: -1240.3289
+      x: -1446.0485
       y: -576
-      width: 2480.6577
+      width: 2892.097
       height: 1152
     m_MinimalGUI: 1
-  m_defaultScale: 0.37586805
-  m_LastWindowPixelSize: {x: 932.39996, y: 454}
+  m_defaultScale: 0.32239583
+  m_LastWindowPixelSize: {x: 1165.5, y: 490.5}
   m_ClearInEditMode: 1
   m_NoCameraWarning: 1
   m_LowResolutionForAspectRatios: 01000000000100000100
@@ -1188,9 +1188,9 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 203.2
-    y: 559.2
+    y: 497.6
     width: 932.39996
-    height: 218.79999
+    height: 280.4
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -1213,7 +1213,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 1
     m_Folders:
-    - Assets/Scripts/Enemy
+    - Assets/Scripts/Hero
     m_Globs: []
     m_ProductIds: 
     m_AnyWithAssetOrigin: 0
@@ -1223,16 +1223,16 @@ MonoBehaviour:
   m_ViewMode: 1
   m_StartGridSize: 50
   m_LastFolders:
-  - Assets/Scripts/Enemy
+  - Assets/Scripts/Hero
   m_LastFoldersGridSize: 50
-  m_LastProjectPath: C:\Users\kokob\HealTheHero-main
+  m_LastProjectPath: C:\Users\kokob\HealTheHero
   m_LockTracker:
     m_IsLocked: 0
   m_FolderTreeState:
-    scrollPos: {x: 0, y: 79}
-    m_SelectedIDs: 4aba0000
-    m_LastClickedID: 47690
-    m_ExpandedIDs: 00000000e6b70000e8b70000eab70000
+    scrollPos: {x: 0, y: 25.200012}
+    m_SelectedIDs: 4eb90000
+    m_LastClickedID: 47438
+    m_ExpandedIDs: 00000000e6b70000e8b70000eab700003cb9000000ca9a3b
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -1287,9 +1287,9 @@ MonoBehaviour:
       m_Icon: {fileID: 0}
       m_ResourceFile: 
   m_ListAreaState:
-    m_SelectedInstanceIDs: 7c560000
-    m_LastClickedInstanceID: 22140
-    m_HadKeyboardFocusLastEvent: 1
+    m_SelectedInstanceIDs: cafaffff
+    m_LastClickedInstanceID: -1334
+    m_HadKeyboardFocusLastEvent: 0
     m_ExpandedInstanceIDs: c6230000a6b90000b0b700002eb6000044b600009abc000082bc0000f2b800001e200100
     m_RenameOverlay:
       m_UserAcceptedRename: 0
@@ -1340,10 +1340,10 @@ MonoBehaviour:
     m_TextWithWhitespace: "Console\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 1
-    y: 504
+    x: 203.2
+    y: 497.6
     width: 932.39996
-    height: 218.79999
+    height: 280.4
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -1415,8 +1415,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Inspector\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 1138.6
-    y: 24
+    x: 1137.6
+    y: 79.200005
     width: 397.40002
     height: 698.8
   m_SerializedDataModeController:
