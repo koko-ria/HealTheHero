@@ -25,7 +25,7 @@ public class Projectile : MonoBehaviour
         // damage Player (support)
         if (other.CompareTag("Player"))
         {
-            Player.Instance?.TakeDamage(damage); // Use null conditional operator for safety
+            //Player.Instance?.TakeDamage(damage); // Use null conditional operator for safety
             Debug.Log($"Projectile hit Player. Damage: {damage}");
             if (destroyOnHit) Destroy(gameObject);
             return;

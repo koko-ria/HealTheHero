@@ -78,7 +78,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 2
   m_Sprite: {fileID: 1124354838, guid: 8d284b0003438364fb81fbb365ed41d9, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -120,8 +120,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.93, y: 2.95, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 0.6, y: 0.6, z: 0.6}
+  m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 6601001039386811301}
   - {fileID: 8236346086105176321}
@@ -139,29 +139,31 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b5ac1676b124ecc4d94b7dc79928c7f8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HeroAI
-  nearestEnemy: {fileID: 0}
-  navSampleDistance: 1
-  maxRoamDuration: 3
-  minRoamDistance: 3
-  maxRoamDistance: 9
-  rushDistanceBeyondTarget: 1.5
+  animator: {fileID: 0}
+  enemy: {fileID: 0}
+  detectionRange: 9.25
+  maxDurationOfRoaming: 3
+  maxDistanceToRoam: 9
+  minDistanceToRoam: 3
+  rushOverShootingDist: 5
   rushDuration: 0.2
   rushCooldown: 1
   rushDamage: 1
-  whirlRadius: 2
-  whirlSpeedDegPerSec: 360
-  whirlEntryTime: 0.4
-  whirlDuration: 5
-  whirlCooldown: 2
-  whirlDamagePerTick: 1
-  whirlDamageTickInterval: 0.4
-  baseHealth: 10
-  baseMoveSpeed: 3.5
-  audioSource: {fileID: 0}
-  sfxRush: {fileID: 0}
-  sfxWhirl: {fileID: 0}
-  sfxBuffReceived: {fileID: 0}
-  animator: {fileID: 0}
+  rushHitRadius: 1
+  whirlRadius: 1
+  whirlSpeed: 180
+  whirlDuration: 3
+  whirlEntryDuration: 0.5
+  whirlCooldown: 4
+  whirlDamage: 1
+  whirlDamageTickRate: 0.5
+  heroAttackRange: 2
+  enemyLayer:
+    serializedVersion: 2
+    m_Bits: 128
+  startingState: 0
+  initialAttackType: 0
+  health: 10
 --- !u!195 &604872835679103600
 NavMeshAgent:
   m_ObjectHideFlags: 0
@@ -229,7 +231,7 @@ Rigidbody2D:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5551589578731389827}
-  m_BodyType: 0
+  m_BodyType: 1
   m_Simulated: 1
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
@@ -246,7 +248,7 @@ Rigidbody2D:
     m_Bits: 0
   m_Interpolate: 0
   m_SleepingMode: 1
-  m_CollisionDetection: 0
+  m_CollisionDetection: 1
   m_Constraints: 4
 --- !u!1 &7187777703765462483
 GameObject:
@@ -316,7 +318,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 3.69
+  m_Radius: 13
 --- !u!114 &1447321579064138396
 MonoBehaviour:
   m_ObjectHideFlags: 0

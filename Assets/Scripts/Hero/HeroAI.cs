@@ -24,6 +24,14 @@ public class HeroAI : MonoBehaviour
     [SerializeField] private float maxDurationOfRoaming = 3f;
     [SerializeField] private float maxDistanceToRoam = 9f;
     [SerializeField] private float minDistanceToRoam = 3f;
+    
+    [Header("Player Support Buffs")]
+    public bool isInvulnerable = false;
+    public bool isInvisible = false;
+    private float currentDamageResistance = 0f; // 0 to 1, e.g., 0.3 for 30% resistance
+    private float currentDamageBuff = 0f;       // 0 to 1, e.g., 0.5 for +50% damage
+    private bool hasShield = false;             // Shield is a flat reduction from incoming damage
+    private float shieldDamageReduction = 0f;   // Specific amount of damage reduction from shield
 
     [Header("Attack Settings - Rush")]
     [SerializeField] private float rushOverShootingDist = 5f;
@@ -125,6 +133,31 @@ public class HeroAI : MonoBehaviour
 
     void FixedUpdate()
     {
+        if (isInvisible)
+        {
+            if (navMeshAgent.enabled)
+            {
+                navMeshAgent.isStopped = true;
+                navMeshAgent.enabled = false;
+            }
+            // Hero does not attack or roam when invisible. Enemies ignore hero.
+            return;
+        }
+        else
+        {
+            if (!navMeshAgent.enabled && !isRushing && !isWhirling) // Re-enable if not invisible and not mid-attack
+            {
+                navMeshAgent.enabled = true;
+            }
+        }
+        // Make sure to disable NavMeshAgent during Rush/Whirl if it's not already
+        if (isRushing || isWhirling)
+        {
+            if (navMeshAgent.enabled) navMeshAgent.isStopped = true;
+            navMeshAgent.enabled = false;
+        }
+
+
         // Update the 'enemy' target based on `enemiesInRange`
         UpdateCurrentTargetEnemy();
 
@@ -252,6 +285,7 @@ public class HeroAI : MonoBehaviour
         }
     }
 
+
     private void HandleAttackingState()
     {
         // If enemy becomes null during FixedUpdate (e.g., destroyed, or left range), UpdateCurrentTargetEnemy will transition to Idle.
@@ -284,7 +318,7 @@ public class HeroAI : MonoBehaviour
         }
     }
 
-    // --- Attack Logic (same as before) ---
+    // --- Attack Logic (Modified to apply damage buff) ---
     private void AttemptAttack(Attacks attackToAttempt)
     {
         switch (attackToAttempt)
@@ -348,7 +382,7 @@ public class HeroAI : MonoBehaviour
         lastWhirlTime = Time.time;
     }
 
-    // --- Coroutines for Attacks (same as before) ---
+    // --- Coroutines for Attacks (Modified to apply damage buff) ---
     private IEnumerator RushingAttackCoroutine(Vector3 target)
     {
         isRushing = true;
@@ -377,8 +411,10 @@ public class HeroAI : MonoBehaviour
             EnemyBehavior enemyComponent = hit.GetComponent<EnemyBehavior>();
             if (enemyComponent != null && hit.transform != transform) // Ensure hero doesn't damage itself
             {
-                enemyComponent.TakeDamage(rushDamage);
-                Debug.Log($"Hero dealt {rushDamage} Rush damage to {hit.name}");
+                // Apply damage buff here
+                int finalDamage = Mathf.RoundToInt(rushDamage * (1 + currentDamageBuff));
+                enemyComponent.TakeDamage(finalDamage);
+                Debug.Log($"Hero dealt {finalDamage} Rush damage (Base: {rushDamage}, Buff: {currentDamageBuff * 100}%) to {hit.name}");
             }
         }
 
@@ -425,7 +461,7 @@ public class HeroAI : MonoBehaviour
 
         currentAngle = (currentAngle % 360);
         elapsed = 0f;
-
+        
         float damageTickTimer = 0f;
 
         while (elapsed < whirlDuration)
@@ -451,8 +487,10 @@ public class HeroAI : MonoBehaviour
                     EnemyBehavior enemyComponent = hit.GetComponent<EnemyBehavior>();
                     if (enemyComponent != null && hit.transform != transform) // Ensure hero doesn't damage itself
                     {
-                        enemyComponent.TakeDamage(whirlDamage);
-                        Debug.Log($"Hero dealt {whirlDamage} Whirl damage to {hit.name}");
+                        // Apply damage buff here
+                        int finalDamage = Mathf.RoundToInt(whirlDamage * (1 + currentDamageBuff));
+                        enemyComponent.TakeDamage(finalDamage);
+                        Debug.Log($"Hero dealt {finalDamage} Whirl damage (Base: {whirlDamage}, Buff: {currentDamageBuff * 100}%) to {hit.name}");
                     }
                 }
                 damageTickTimer = 0f;
@@ -491,12 +529,35 @@ public class HeroAI : MonoBehaviour
             isCurrentlyRoaming = false;
         }
     }
-
-    // --- Damage and Death (same as before) ---
+   // --- Damage and Death (Modified to account for invulnerability and resistance/shield) ---
     public void TakeDamage(int damage)
     {
-        health -= damage;
-        Debug.Log($"Hero took {damage} damage. Health: {health}");
+        if (isInvulnerable)
+        {
+            Debug.Log("Hero is invulnerable! No damage taken.");
+            return;
+        }
+        if (isInvisible) // Invisibility also prevents damage
+        {
+            Debug.Log("Hero is invisible! No damage taken.");
+            return;
+        }
+
+        float actualDamage = damage;
+
+        // Apply shield reduction first (flat amount)
+        if (hasShield)
+        {
+            actualDamage -= shieldDamageReduction;
+            actualDamage = Mathf.Max(0, actualDamage); // Damage cannot go below zero from shield
+            Debug.Log($"Shield absorbed {shieldDamageReduction} damage. Remaining damage: {actualDamage}");
+        }
+
+        // Apply resistance reduction (percentage)
+        actualDamage *= (1 - currentDamageResistance);
+
+        health -= actualDamage;
+        Debug.Log($"Hero took {actualDamage:F1} damage (Base: {damage}, Res: {currentDamageResistance * 100}%). Health: {health}");
 
         if (health <= 0)
         {
@@ -504,11 +565,90 @@ public class HeroAI : MonoBehaviour
         }
     }
 
+    public void Heal(float amount)
+    {
+        health += amount;
+        // Optionally cap health at a max if you have one
+        // health = Mathf.Min(maxHealth, health);
+        Debug.Log($"Hero healed for {amount:F1}. Current Health: {health}");
+    }
+
+
     void Die()
     {
         Debug.Log("Hero Died!");
         Destroy(gameObject);
     }
+
+    // --- Player Support Buff Methods (NEW) ---
+    public void SetInvulnerable(bool invulnerable)
+    {
+        isInvulnerable = invulnerable;
+        Debug.Log($"Hero Invulnerability: {isInvulnerable}");
+    }
+
+    public void SetInvisibility(bool invisible)
+    {
+        isInvisible = invisible;
+        // When invisible, stop movement and hide visual/collider
+        if (isInvisible)
+        {
+            if (navMeshAgent.enabled) navMeshAgent.isStopped = true;
+            navMeshAgent.enabled = false; // Disable NavMeshAgent
+            // TODO: Hide renderer, disable colliders that interact with enemies
+        }
+        else
+        {
+            // Re-enable NavMeshAgent if not currently rushing/whirling
+            if (!isRushing && !isWhirling)
+            {
+                navMeshAgent.enabled = true;
+                navMeshAgent.isStopped = false; // Resume movement if there's a target
+            }
+            // TODO: Show renderer, re-enable colliders
+        }
+        Debug.Log($"Hero Invisibility: {isInvisible}");
+    }
+
+
+    public void ApplyShield(float reductionAmount)
+    {
+        hasShield = true;
+        shieldDamageReduction = reductionAmount;
+        Debug.Log($"Hero Shield active: reduces {reductionAmount} damage.");
+    }
+
+    public void RemoveShield()
+    {
+        hasShield = false;
+        shieldDamageReduction = 0f;
+        Debug.Log("Hero Shield removed.");
+    }
+
+    public void ApplyResistance(float resistancePercentage)
+    {
+        currentDamageResistance = resistancePercentage;
+        Debug.Log($"Hero Resistance buff active: {resistancePercentage * 100}% damage reduction.");
+    }
+
+    public void RemoveResistance()
+    {
+        currentDamageResistance = 0f;
+        Debug.Log("Hero Resistance buff removed.");
+    }
+
+    public void ApplyDamageBuff(float buffPercentage)
+    {
+        currentDamageBuff = buffPercentage;
+        Debug.Log($"Hero Damage buff active: +{buffPercentage * 100}% damage.");
+    }
+
+    public void RemoveDamageBuff()
+    {
+        currentDamageBuff = 0f;
+        Debug.Log("Hero Damage buff removed.");
+    }
+
 
     // --- Helper Methods (same as before, with minor adjustment to StopCoroutine) ---
     private void StopAllAttackCoroutines()
@@ -518,7 +658,8 @@ public class HeroAI : MonoBehaviour
         isRushing = false;
         isWhirling = false;
 
-        if (!navMeshAgent.enabled)
+        // Only re-enable NavMeshAgent if not currently invisible
+        if (!navMeshAgent.enabled && !isInvisible)
         {
             navMeshAgent.enabled = true;
         }
